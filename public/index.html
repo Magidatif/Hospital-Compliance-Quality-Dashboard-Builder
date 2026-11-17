@@ -1,0 +1,1136 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hospital Compliance &amp; Quality Dashboard Builder (Excel → Dashboard)</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230d9488' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background-color: #f1f5f9;
+      color: #0f172a;
+    }
+    .tabular-nums { font-variant-numeric: tabular-nums; }
+    .tab-btn.active {
+      background-color: #0f766e;
+      color: #ffffff;
+      box-shadow: 0 2px 6px rgba(15, 118, 110, 0.25);
+    }
+    .heatmap-cell {
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .heatmap-cell:hover {
+      transform: scale(1.03);
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
+      z-index: 10;
+    }
+    .drop-active {
+      border-color: #0d9488 !important;
+      background-color: #f0fdfa !important;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- Top Header -->
+  <header class="bg-slate-900 text-white shadow-lg border-b border-teal-600/40">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="w-11 h-11 rounded-xl bg-teal-600 flex items-center justify-center shadow-inner shrink-0">
+          <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-lg sm:text-xl font-extrabold tracking-tight">Hospital Compliance &amp; Quality Dashboard Builder</h1>
+          <p class="text-xs sm:text-sm text-slate-300">Upload hospital checklist Excel files (.xlsx) to build an interactive dashboard instantly from your real data</p>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <label for="fileInputTop" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-teal-600 hover:bg-teal-500 text-white text-xs sm:text-sm font-bold transition cursor-pointer">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+          <span>Add Excel Files</span>
+        </label>
+        <input id="fileInputTop" type="file" accept=".xlsx,.xls" multiple class="hidden" />
+        <button id="btnExportCsv" type="button" class="hidden inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-bold transition cursor-pointer">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+          <span>Export Gaps CSV</span>
+        </button>
+        <button id="btnClearAll" type="button" class="hidden inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-rose-700 border border-slate-700 text-slate-200 text-xs sm:text-sm font-semibold transition cursor-pointer">
+          Clear All Files
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="fixed bottom-5 right-5 z-50 hidden bg-slate-900 text-white text-sm font-semibold px-4 py-2.5 rounded-xl shadow-xl border border-teal-500/40"></div>
+
+  <!-- Upload / Dropzone Screen -->
+  <section id="uploadSection" class="max-w-4xl w-full mx-auto px-4 sm:px-6 py-10 flex-1 flex flex-col justify-center">
+    <div id="dropZone" class="bg-white border-2 border-dashed border-slate-300 rounded-3xl p-8 sm:p-12 text-center shadow-sm transition-colors cursor-pointer">
+      <div class="w-16 h-16 mx-auto rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center mb-4">
+        <svg class="w-9 h-9" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+        </svg>
+      </div>
+      <h2 class="text-xl sm:text-2xl font-extrabold text-slate-800 mb-2">Drag &amp; Drop Excel Files (.xlsx) Here</h2>
+      <p class="text-sm text-slate-500 max-w-xl mx-auto mb-6">
+        Upload one or multiple hospital checklist workbooks at once. All parsing runs 100% locally in your browser with zero dummy data.
+      </p>
+      <label for="fileInputMain" class="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-sm shadow-md transition cursor-pointer">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+        <span>Choose Excel Files from Device</span>
+      </label>
+      <input id="fileInputMain" type="file" accept=".xlsx,.xls" multiple class="hidden" />
+
+      <div class="mt-8 pt-6 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-3 gap-4 text-left text-xs text-slate-500">
+        <div class="bg-slate-50 rounded-xl p-3">
+          <p class="font-bold text-slate-700 mb-1">1. Department Summary</p>
+          <p>Extracts overall compliance and 13 department scores from <span class="font-mono text-teal-700">BRANCHES ANALYSIS</span>.</p>
+        </div>
+        <div class="bg-slate-50 rounded-xl p-3">
+          <p class="font-bold text-slate-700 mb-1">2. Checklist Analysis</p>
+          <p>Reads <span class="font-mono text-teal-700">RAD, ER, OR, PH &amp; ST, OUTPAT, INPAT, ICUS, CRASHCART, BLOOD BANK, LAB</span> sheets.</p>
+        </div>
+        <div class="bg-slate-50 rounded-xl p-3">
+          <p class="font-bold text-slate-700 mb-1">3. Instant Dashboard</p>
+          <p>Generates interactive charts, heatmap matrix, gap tables, action plans, and CSV export.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Loaded Files & Dashboard Container -->
+  <div id="dashboardWrapper" class="hidden flex-1 flex flex-col">
+
+    <!-- Loaded Files Chips Bar -->
+    <div class="bg-slate-800 text-slate-200 border-b border-slate-700">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex flex-wrap items-center gap-2 text-xs">
+        <span class="font-bold text-teal-400">Loaded Files:</span>
+        <div id="loadedFilesList" class="flex flex-wrap items-center gap-1.5"></div>
+      </div>
+    </div>
+
+    <!-- Filters & Navigation Bar -->
+    <section class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <nav class="flex flex-wrap gap-1.5" aria-label="Main Tabs">
+            <button type="button" data-tab="overview" class="tab-btn active px-3.5 py-2 rounded-lg text-xs sm:text-sm font-bold text-slate-700 hover:bg-slate-100 transition cursor-pointer">Executive Overview</button>
+            <button type="button" data-tab="heatmap" class="tab-btn px-3.5 py-2 rounded-lg text-xs sm:text-sm font-bold text-slate-700 hover:bg-slate-100 transition cursor-pointer">Heatmap Matrix</button>
+            <button type="button" data-tab="actionplan" class="tab-btn px-3.5 py-2 rounded-lg text-xs sm:text-sm font-bold text-slate-700 hover:bg-slate-100 transition cursor-pointer">Gaps &amp; Action Plan</button>
+            <button type="button" data-tab="explorer" class="tab-btn px-3.5 py-2 rounded-lg text-xs sm:text-sm font-bold text-slate-700 hover:bg-slate-100 transition cursor-pointer">Full Checklist Explorer</button>
+          </nav>
+          <div class="flex items-center gap-2">
+            <div id="activeScopeBadge" class="text-xs font-bold text-teal-800 bg-teal-50 border border-teal-200 px-3 py-1.5 rounded-full"></div>
+            <button id="btnResetFilters" type="button" class="text-xs font-bold text-slate-600 hover:text-teal-700 px-2.5 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">Reset</button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+          <div>
+            <label for="filterHospital" class="block text-[11px] font-bold text-slate-500 mb-1">Hospital</label>
+            <select id="filterHospital" class="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-1.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500"></select>
+          </div>
+          <div>
+            <label for="filterDepartment" class="block text-[11px] font-bold text-slate-500 mb-1">Department</label>
+            <select id="filterDepartment" class="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-1.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500"></select>
+          </div>
+          <div>
+            <label for="filterScore" class="block text-[11px] font-bold text-slate-500 mb-1">Evaluation Status</label>
+            <select id="filterScore" class="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-1.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500">
+              <option value="ALL">All Statuses</option>
+              <option value="2">Fully Met (2)</option>
+              <option value="1">Partially Met (1)</option>
+              <option value="0">Not Met (0)</option>
+              <option value="NA">Not Applicable (NA)</option>
+              <option value="NONE">Not Scored / Blank</option>
+            </select>
+          </div>
+          <div>
+            <label for="searchInput" class="block text-[11px] font-bold text-slate-500 mb-1">Search Items &amp; Notes</label>
+            <input id="searchInput" type="text" placeholder="Search criteria, notes, responsible..." class="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500" />
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Main Dashboard Content -->
+    <main class="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 space-y-6">
+
+      <!-- KPI Row -->
+      <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm">
+          <p class="text-xs font-bold text-slate-500">Overall Compliance Rate</p>
+          <p id="kpiOverall" class="text-2xl sm:text-3xl font-extrabold text-teal-700 mt-1 tabular-nums">--%</p>
+          <p id="kpiOverallSub" class="text-[11px] text-slate-400 mt-1"></p>
+        </div>
+        <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm">
+          <p class="text-xs font-bold text-slate-500">Top Performing Hospital</p>
+          <p id="kpiTopHosp" class="text-lg font-extrabold text-emerald-700 mt-1 truncate">--</p>
+          <p id="kpiTopHospScore" class="text-xs font-bold text-emerald-600 mt-1 tabular-nums">--%</p>
+        </div>
+        <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm">
+          <p class="text-xs font-bold text-slate-500">Total Matching Items</p>
+          <p id="kpiTotalItems" class="text-2xl sm:text-3xl font-extrabold text-slate-800 mt-1 tabular-nums">0</p>
+          <p id="kpiMetItems" class="text-[11px] text-emerald-600 font-semibold mt-1 tabular-nums"></p>
+        </div>
+        <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm">
+          <p class="text-xs font-bold text-slate-500">Gap Items (Score 0 &amp; 1)</p>
+          <p id="kpiGapItems" class="text-2xl sm:text-3xl font-extrabold text-rose-600 mt-1 tabular-nums">0</p>
+          <p id="kpiGapBreakdown" class="text-[11px] text-slate-500 mt-1 tabular-nums"></p>
+        </div>
+        <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm">
+          <p class="text-xs font-bold text-slate-500">Documented Notes &amp; Actions</p>
+          <p id="kpiActionCount" class="text-2xl sm:text-3xl font-extrabold text-amber-600 mt-1 tabular-nums">0</p>
+          <p class="text-[11px] text-slate-400 mt-1">Recorded in uploaded files</p>
+        </div>
+      </section>
+
+      <!-- TAB 1: Overview -->
+      <section id="tab-overview" class="space-y-6">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="text-base font-extrabold text-slate-800">Overall Compliance Comparison by Hospital</h2>
+              <span class="text-[11px] font-bold text-slate-400">From branch summary</span>
+            </div>
+            <div class="relative h-72">
+              <canvas id="chartHospitals"></canvas>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="text-base font-extrabold text-slate-800">Active Departments Average Compliance</h2>
+              <span class="text-[11px] font-bold text-slate-400">Excludes non-applicable (0%) departments</span>
+            </div>
+            <div class="relative h-72">
+              <canvas id="chartDepartments"></canvas>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="text-base font-extrabold text-slate-800">Evaluation Score Distribution</h2>
+              <span class="text-[11px] font-bold text-slate-400">By current filter scope</span>
+            </div>
+            <div class="relative h-72">
+              <canvas id="chartDistribution"></canvas>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="text-base font-extrabold text-slate-800">Compliance by Main Category</h2>
+              <span class="text-[11px] font-bold text-slate-400">Average recorded scores</span>
+            </div>
+            <div class="relative h-72">
+              <canvas id="chartCategories"></canvas>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: Heatmap Matrix -->
+      <section id="tab-heatmap" class="hidden space-y-4">
+        <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+            <div>
+              <h2 class="text-base font-extrabold text-slate-800">Hospital × Department Compliance Heatmap</h2>
+              <p class="text-xs text-slate-500">Click any cell to jump directly to that department’s gaps and action plan</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2 text-[11px] font-bold">
+              <span class="px-2 py-1 rounded bg-emerald-100 text-emerald-800">≥ 90% Excellent</span>
+              <span class="px-2 py-1 rounded bg-amber-100 text-amber-800">75%–89.9% Moderate</span>
+              <span class="px-2 py-1 rounded bg-rose-100 text-rose-800">&lt; 75% Gap</span>
+              <span class="px-2 py-1 rounded bg-slate-100 text-slate-500">0% Inactive</span>
+            </div>
+          </div>
+          <div class="overflow-x-auto">
+            <table id="heatmapTable" class="w-full text-xs sm:text-sm border-collapse"></table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: Action Plan & Gaps -->
+      <section id="tab-actionplan" class="hidden space-y-4">
+        <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <h2 class="text-base font-extrabold text-slate-800">Gaps Analysis &amp; Corrective Action Plan</h2>
+              <p class="text-xs text-slate-500">View Not Met (0), Partially Met (1), and documented notes from uploaded workbooks</p>
+            </div>
+            <div class="flex flex-wrap gap-1.5" id="gapModeButtons">
+              <button type="button" data-gapmode="all_gaps" class="gap-mode-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-teal-600 text-white cursor-pointer">All Gaps &amp; Notes</button>
+              <button type="button" data-gapmode="zero" class="gap-mode-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer">Not Met (0)</button>
+              <button type="button" data-gapmode="one" class="gap-mode-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer">Partially Met (1)</button>
+              <button type="button" data-gapmode="with_action" class="gap-mode-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer">With Corrective Action</button>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto border border-slate-200 rounded-xl">
+            <table class="w-full text-xs sm:text-sm text-left">
+              <thead class="bg-slate-100 text-slate-700 font-bold">
+                <tr>
+                  <th class="p-3 whitespace-nowrap">Hospital</th>
+                  <th class="p-3 whitespace-nowrap">Department</th>
+                  <th class="p-3 whitespace-nowrap">Main Category</th>
+                  <th class="p-3 min-w-[220px]">Checklist Item</th>
+                  <th class="p-3 whitespace-nowrap">Score</th>
+                  <th class="p-3 min-w-[160px]">Notes</th>
+                  <th class="p-3 min-w-[180px]">Corrective Action</th>
+                  <th class="p-3 whitespace-nowrap">Responsible</th>
+                  <th class="p-3 whitespace-nowrap">Timeframe</th>
+                </tr>
+              </thead>
+              <tbody id="actionPlanBody" class="divide-y divide-slate-200"></tbody>
+            </table>
+          </div>
+          <div class="flex items-center justify-between text-xs text-slate-500 pt-1">
+            <span id="actionPlanCount"></span>
+            <div class="flex items-center gap-2">
+              <button type="button" id="apPrev" class="px-3 py-1 rounded border border-slate-300 hover:bg-slate-100 disabled:opacity-40 cursor-pointer">Previous</button>
+              <span id="apPageInfo" class="font-bold"></span>
+              <button type="button" id="apNext" class="px-3 py-1 rounded border border-slate-300 hover:bg-slate-100 disabled:opacity-40 cursor-pointer">Next</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 4: Full Explorer -->
+      <section id="tab-explorer" class="hidden space-y-4">
+        <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+          <div>
+            <h2 class="text-base font-extrabold text-slate-800">Full Checklist Explorer</h2>
+            <p class="text-xs text-slate-500">Browse all extracted checklist items from uploaded files</p>
+          </div>
+          <div class="overflow-x-auto border border-slate-200 rounded-xl">
+            <table class="w-full text-xs sm:text-sm text-left">
+              <thead class="bg-slate-100 text-slate-700 font-bold">
+                <tr>
+                  <th class="p-3 whitespace-nowrap">Hospital</th>
+                  <th class="p-3 whitespace-nowrap">Department</th>
+                  <th class="p-3 whitespace-nowrap">Main Category</th>
+                  <th class="p-3 min-w-[260px]">Checklist Item</th>
+                  <th class="p-3 whitespace-nowrap">Status</th>
+                  <th class="p-3 min-w-[180px]">Notes</th>
+                </tr>
+              </thead>
+              <tbody id="explorerBody" class="divide-y divide-slate-200"></tbody>
+            </table>
+          </div>
+          <div class="flex items-center justify-between text-xs text-slate-500 pt-1">
+            <span id="explorerCount"></span>
+            <div class="flex items-center gap-2">
+              <button type="button" id="exPrev" class="px-3 py-1 rounded border border-slate-300 hover:bg-slate-100 disabled:opacity-40 cursor-pointer">Previous</button>
+              <span id="exPageInfo" class="font-bold"></span>
+              <button type="button" id="exNext" class="px-3 py-1 rounded border border-slate-300 hover:bg-slate-100 disabled:opacity-40 cursor-pointer">Next</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <footer class="bg-white border-t border-slate-200 py-3 text-center text-xs text-slate-500">
+    Quality Compliance Dashboard Builder | 100% client-side processing from your Excel files
+  </footer>
+
+  <script>
+    const CHECKLIST_SHEETS = ['RAD', 'PH & ST', 'ER', 'OR', 'OUTPAT', 'INPAT', 'ICUS', 'CRASHCART', 'BLOOD BANK', 'LAB'];
+
+    const DEPT_EN_MAP = {
+      'الأشعة': 'Radiology', 'الصيدلية': 'Pharmacy', 'المخازن': 'Medical Stores',
+      'الطوارئ': 'Emergency (ER)', 'العمليات': 'Operating Rooms (OR)', 'العيادات الخارجية': 'Outpatient Clinics',
+      'الأقسام الداخلية': 'Inpatient Wards', 'الرعاية المركزة': 'Intensive Care (ICU)',
+      'رعاية الأطفال': 'Pediatric ICU (PICU/NICU)', 'الرعاية المتوسطة': 'Intermediate Care',
+      'عربة الطوارئ': 'Crash Cart', 'بنك الدم': 'Blood Bank', 'المعمل': 'Laboratory'
+    };
+
+    const CAT_EN_MAP = {
+      'البنية التحتية': 'Infrastructure', 'المستندات': 'Documents', 'نماذج الملف الطبي': 'Medical Record Forms',
+      'الملاحظة والمقابلات الشخصية': 'Observation & Interviews', 'الملاحظة': 'Observation',
+      'المقابلات الشخصية': 'Interviews', 'البوسترات': 'Posters', 'ملف طبي': 'Medical Record',
+      'سلامة الاجهزة': 'Equipment Safety', 'سلامة الأجهزة': 'Equipment Safety', 'القوى البشرية': 'Manpower'
+    };
+
+    function trDept(d) { return DEPT_EN_MAP[d] || d; }
+    function trCat(c) { return CAT_EN_MAP[c] || c; }
+
+    const state = {
+      datasets: [],
+      departmentsOrder: [],
+      activeTab: 'overview',
+      hospital: 'ALL',
+      department: 'ALL',
+      score: 'ALL',
+      search: '',
+      gapMode: 'all_gaps',
+      apPage: 1,
+      exPage: 1,
+      pageSize: 40
+    };
+
+    const charts = {};
+
+    function showToast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.classList.remove('hidden');
+      clearTimeout(showToast._t);
+      showToast._t = setTimeout(() => el.classList.add('hidden'), 3200);
+    }
+
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function cleanCell(val) {
+      if (val === null || val === undefined) return null;
+      if (val instanceof Date) {
+        if (isNaN(val.getTime())) return null;
+        return val.toISOString().slice(0, 10);
+      }
+      if (typeof val === 'number') {
+        if (Number.isNaN(val)) return null;
+        return val;
+      }
+      const s = String(val).trim();
+      return s === '' ? null : s;
+    }
+
+    function formatTimeframe(val) {
+      if (val === null || val === undefined || val === '') return '';
+      if (val instanceof Date && !isNaN(val.getTime())) return val.toISOString().slice(0, 10);
+      if (typeof val === 'number' && val > 30000 && val < 70000) {
+        const utc = new Date(Math.round((val - 25569) * 86400 * 1000));
+        if (!isNaN(utc.getTime())) return utc.toISOString().slice(0, 10);
+      }
+      return String(val).trim();
+    }
+
+    function getSheetCell(ws, col1Based, row1Based) {
+      const addr = XLSX.utils.encode_cell({ c: col1Based - 1, r: row1Based - 1 });
+      const cell = ws[addr];
+      return cell ? cell.v : null;
+    }
+
+    function parseWorkbook(wb, filename) {
+      const defaultName = filename.replace(/\.(xlsx|xls)$/i, '').trim();
+      const wsBA = wb.Sheets['BRANCHES ANALYSIS'];
+
+      let hospital = defaultName;
+      let branch = '';
+      let month = '';
+      let year = '';
+      let overallScore = null;
+      const deptScores = {};
+
+      if (wsBA) {
+        const hCell = cleanCell(getSheetCell(wsBA, 7, 2)); // G2
+        if (hCell) hospital = String(hCell);
+        const bCell = cleanCell(getSheetCell(wsBA, 12, 2)); // L2
+        if (bCell) branch = String(bCell);
+        const mCell = cleanCell(getSheetCell(wsBA, 17, 2)); // Q2
+        if (mCell) month = String(mCell);
+        const yCell = cleanCell(getSheetCell(wsBA, 20, 2)); // T2
+        if (yCell) year = String(yCell);
+
+        const ovCell = cleanCell(getSheetCell(wsBA, 4, 6)); // D6
+        if (typeof ovCell === 'number') overallScore = ovCell;
+
+        for (let c = 8; c <= 25; c++) {
+          const dName = cleanCell(getSheetCell(wsBA, c, 6));
+          const dScore = cleanCell(getSheetCell(wsBA, c, 7));
+          if (dName) {
+            deptScores[String(dName).trim()] = typeof dScore === 'number' ? dScore : 0;
+          }
+        }
+      }
+
+      const items = [];
+      const categoryScores = [];
+
+      for (const sname of CHECKLIST_SHEETS) {
+        const ws = wb.Sheets[sname];
+        if (!ws) continue;
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true });
+        if (!rows.length) continue;
+
+        let headerIdx = 2; // 0-indexed row 3
+        for (let r = 0; r < Math.min(6, rows.length); r++) {
+          if (rows[r] && cleanCell(rows[r][0]) === 'القسم') {
+            headerIdx = r;
+            break;
+          }
+        }
+
+        for (let r = headerIdx + 1; r < rows.length; r++) {
+          const row = rows[r];
+          if (!row) continue;
+          let dept = cleanCell(row[0]);
+          const cat = cleanCell(row[1]);
+          const itemName = cleanCell(row[2]);
+          const scoreRaw = cleanCell(row[3]);
+          const catScore = cleanCell(row[4]);
+          const evalStatus = cleanCell(row[5]);
+          const notes = cleanCell(row[6]);
+          const action = cleanCell(row[9]);
+          const resp = cleanCell(row[10]);
+          const timeframe = formatTimeframe(row[11]);
+
+          if (itemName === null && dept === null) continue;
+          if (String(scoreRaw) === 'TOTAL:' || String(catScore) === 'TOTAL:') continue;
+          if (itemName === null) continue;
+
+          if (sname === 'LAB' && dept === 'بنك الدم') dept = 'المعمل';
+          if (dept === 'الآشعة') dept = 'الأشعة';
+          dept = dept ? String(dept).trim() : '';
+
+          if (typeof catScore === 'number') {
+            categoryScores.push({
+              sheet: sname,
+              department: dept,
+              category: cat ? String(cat).trim() : '',
+              score: catScore,
+              evaluation: evalStatus ? String(evalStatus).trim() : ''
+            });
+          }
+
+          let normScore = null;
+          if (typeof scoreRaw === 'number') {
+            normScore = (scoreRaw === 0 || scoreRaw === 1 || scoreRaw === 2) ? scoreRaw : scoreRaw;
+          } else if (typeof scoreRaw === 'string' && ['NA', 'N/A'].includes(scoreRaw.toUpperCase())) {
+            normScore = 'NA';
+          }
+
+          items.push({
+            s: sname,
+            d: dept,
+            c: cat ? String(cat).trim() : '',
+            i: String(itemName).trim(),
+            v: normScore,
+            n: notes ? String(notes).trim() : '',
+            a: action ? String(action).trim() : '',
+            r: resp ? String(resp).trim() : '',
+            t: timeframe
+          });
+        }
+      }
+
+      if (overallScore === null) {
+        const activeVals = Object.values(deptScores).filter(v => v > 0);
+        overallScore = activeVals.length ? activeVals.reduce((a, b) => a + b, 0) / activeVals.length : 0;
+      }
+
+      return {
+        file: filename,
+        hospital,
+        branch,
+        month,
+        year,
+        overall_score: overallScore,
+        dept_scores: deptScores,
+        category_scores: categoryScores,
+        items
+      };
+    }
+
+    async function handleFiles(fileList) {
+      const files = Array.from(fileList || []).filter(f => /\.(xlsx|xls)$/i.test(f.name));
+      if (!files.length) {
+        showToast('Please select valid .xlsx or .xls Excel files');
+        return;
+      }
+
+      let added = 0;
+      for (const file of files) {
+        try {
+          const buf = await file.arrayBuffer();
+          const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+          const parsed = parseWorkbook(wb, file.name);
+          if (!parsed.items.length && !Object.keys(parsed.dept_scores).length) {
+            showToast(`Could not find checklist structure in: ${file.name}`);
+            continue;
+          }
+          const existingIdx = state.datasets.findIndex(d => d.file === file.name || d.hospital === parsed.hospital);
+          if (existingIdx >= 0) {
+            state.datasets[existingIdx] = parsed;
+          } else {
+            state.datasets.push(parsed);
+          }
+          added++;
+        } catch (err) {
+          showToast(`Error reading file: ${file.name}`);
+        }
+      }
+
+      if (added > 0) {
+        rebuildDepartmentsOrder();
+        state.hospital = 'ALL';
+        state.department = 'ALL';
+        state.score = 'ALL';
+        state.apPage = 1;
+        state.exPage = 1;
+        syncVisibility();
+        populateSelects();
+        renderLoadedFilesChips();
+        renderHeatmap();
+        updateAll();
+        showToast(`Processed ${added} file(s) and built dashboard successfully`);
+      }
+    }
+
+    function rebuildDepartmentsOrder() {
+      const set = new Set();
+      for (const h of state.datasets) {
+        Object.keys(h.dept_scores).forEach(d => set.add(d));
+        h.items.forEach(it => { if (it.d) set.add(it.d); });
+      }
+      state.departmentsOrder = Array.from(set);
+    }
+
+    function syncVisibility() {
+      const hasData = state.datasets.length > 0;
+      document.getElementById('uploadSection').classList.toggle('hidden', hasData);
+      document.getElementById('dashboardWrapper').classList.toggle('hidden', !hasData);
+      document.getElementById('btnExportCsv').classList.toggle('hidden', !hasData);
+      document.getElementById('btnClearAll').classList.toggle('hidden', !hasData);
+    }
+
+    function renderLoadedFilesChips() {
+      const container = document.getElementById('loadedFilesList');
+      container.innerHTML = state.datasets.map((d, idx) => `
+        <span class="inline-flex items-center gap-1.5 bg-slate-700 text-white px-2.5 py-1 rounded-full text-[11px] font-semibold">
+          <span>${escapeHtml(d.hospital)} (${(d.overall_score * 100).toFixed(1)}%)</span>
+          <button type="button" data-remove-idx="${idx}" class="remove-file-btn text-slate-300 hover:text-rose-400 font-bold cursor-pointer" title="Remove file">×</button>
+        </span>
+      `).join('');
+
+      container.querySelectorAll('.remove-file-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const i = Number(btn.getAttribute('data-remove-idx'));
+          state.datasets.splice(i, 1);
+          rebuildDepartmentsOrder();
+          state.hospital = 'ALL';
+          state.department = 'ALL';
+          syncVisibility();
+          if (state.datasets.length) {
+            populateSelects();
+            renderLoadedFilesChips();
+            renderHeatmap();
+            updateAll();
+          }
+          showToast('File removed');
+        });
+      });
+    }
+
+    function getScoreBadge(v) {
+      if (v === 2) return '<span class="inline-flex px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">Met (2)</span>';
+      if (v === 1) return '<span class="inline-flex px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800">Partial (1)</span>';
+      if (v === 0) return '<span class="inline-flex px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800">Not Met (0)</span>';
+      if (v === 'NA') return '<span class="inline-flex px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600">N/A</span>';
+      return '<span class="inline-flex px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-400">Not Scored</span>';
+    }
+
+    function getFilteredHospitals() {
+      if (state.hospital === 'ALL') return state.datasets;
+      return state.datasets.filter(h => h.hospital === state.hospital);
+    }
+
+    function getFilteredItems() {
+      const hosps = getFilteredHospitals();
+      const q = state.search.trim().toLowerCase();
+      const res = [];
+      for (const h of hosps) {
+        for (const it of h.items) {
+          if (state.department !== 'ALL' && it.d !== state.department) continue;
+          if (state.score !== 'ALL') {
+            if (state.score === 'NONE' && it.v !== null) continue;
+            if (state.score === 'NA' && it.v !== 'NA') continue;
+            if (['0', '1', '2'].includes(state.score) && String(it.v) !== state.score) continue;
+          }
+          if (q) {
+            const hay = `${h.hospital} ${it.d} ${it.c} ${it.i} ${it.n} ${it.a} ${it.r}`.toLowerCase();
+            if (!hay.includes(q)) continue;
+          }
+          res.push({ hospital: h.hospital, ...it });
+        }
+      }
+      return res;
+    }
+
+    function populateSelects() {
+      const hSel = document.getElementById('filterHospital');
+      const prevH = state.hospital;
+      hSel.innerHTML = `<option value="ALL">All Hospitals (${state.datasets.length})</option>` +
+        state.datasets.map(h => {
+          const period = [h.month, h.year].filter(Boolean).join(' ');
+          const label = period ? `${h.hospital} (${period})` : h.hospital;
+          return `<option value="${escapeHtml(h.hospital)}">${escapeHtml(label)}</option>`;
+        }).join('');
+      hSel.value = prevH;
+
+      const dSel = document.getElementById('filterDepartment');
+      const prevD = state.department;
+      dSel.innerHTML = `<option value="ALL">All Departments (${state.departmentsOrder.length})</option>` +
+        state.departmentsOrder.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(trDept(d))}</option>`).join('');
+      dSel.value = prevD;
+    }
+
+    function renderKPIs(filteredItems) {
+      const hosps = getFilteredHospitals();
+      let overallPct = 0;
+      if (state.department === 'ALL') {
+        const sum = hosps.reduce((acc, h) => acc + (h.overall_score || 0), 0);
+        overallPct = hosps.length ? (sum / hosps.length) * 100 : 0;
+      } else {
+        const activeScores = hosps.map(h => h.dept_scores[state.department] || 0).filter(v => v > 0);
+        overallPct = activeScores.length ? (activeScores.reduce((a, b) => a + b, 0) / activeScores.length) * 100 : 0;
+      }
+
+      document.getElementById('kpiOverall').textContent = `${overallPct.toFixed(2)}%`;
+      document.getElementById('kpiOverallSub').textContent = state.hospital === 'ALL'
+        ? `Average of ${hosps.length} hospitals`
+        : `${hosps[0]?.hospital || ''}`;
+
+      const sortedHosps = [...hosps].sort((a, b) => {
+        const sa = state.department === 'ALL' ? a.overall_score : (a.dept_scores[state.department] || 0);
+        const sb = state.department === 'ALL' ? b.overall_score : (b.dept_scores[state.department] || 0);
+        return sb - sa;
+      });
+      const topH = sortedHosps[0];
+      if (topH) {
+        const topS = state.department === 'ALL' ? topH.overall_score : (topH.dept_scores[state.department] || 0);
+        document.getElementById('kpiTopHosp').textContent = topH.hospital;
+        document.getElementById('kpiTopHospScore').textContent = `${(topS * 100).toFixed(2)}%`;
+      } else {
+        document.getElementById('kpiTopHosp').textContent = '--';
+        document.getElementById('kpiTopHospScore').textContent = '--%';
+      }
+
+      const c2 = filteredItems.filter(x => x.v === 2).length;
+      const c1 = filteredItems.filter(x => x.v === 1).length;
+      const c0 = filteredItems.filter(x => x.v === 0).length;
+      const actions = filteredItems.filter(x => x.a || x.n).length;
+
+      document.getElementById('kpiTotalItems').textContent = filteredItems.length.toLocaleString('en-US');
+      document.getElementById('kpiMetItems').textContent = `Fully Met: ${c2.toLocaleString('en-US')}`;
+      document.getElementById('kpiGapItems').textContent = (c0 + c1).toLocaleString('en-US');
+      document.getElementById('kpiGapBreakdown').textContent = `Not Met: ${c0} | Partial: ${c1}`;
+      document.getElementById('kpiActionCount').textContent = actions.toLocaleString('en-US');
+
+      const scopeParts = [state.hospital === 'ALL' ? 'All Hospitals' : state.hospital];
+      if (state.department !== 'ALL') scopeParts.push(trDept(state.department));
+      if (state.score !== 'ALL') scopeParts.push(`Status: ${state.score}`);
+      document.getElementById('activeScopeBadge').textContent = scopeParts.join(' • ');
+    }
+
+    function destroyChart(key) {
+      if (charts[key]) {
+        charts[key].destroy();
+        charts[key] = null;
+      }
+    }
+
+    function renderCharts(filteredItems) {
+      Chart.defaults.font.family = "'Inter', system-ui, sans-serif";
+
+      destroyChart('hospitals');
+      const hospsSorted = [...state.datasets].sort((a, b) => b.overall_score - a.overall_score);
+      charts.hospitals = new Chart(document.getElementById('chartHospitals'), {
+        type: 'bar',
+        data: {
+          labels: hospsSorted.map(h => h.hospital),
+          datasets: [{
+            label: 'Compliance (%)',
+            data: hospsSorted.map(h => Number((h.overall_score * 100).toFixed(2))),
+            backgroundColor: hospsSorted.map(h => {
+              if (state.hospital !== 'ALL' && h.hospital !== state.hospital) return '#cbd5e1';
+              return h.overall_score >= 0.85 ? '#0f766e' : (h.overall_score >= 0.75 ? '#f59e0b' : '#ef4444');
+            }),
+            borderRadius: 8
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: { x: { min: 0, max: 100, ticks: { callback: v => v + '%' } } }
+        }
+      });
+
+      destroyChart('departments');
+      const hospsScope = getFilteredHospitals();
+      const deptAvgs = state.departmentsOrder.map(d => {
+        const vals = hospsScope.map(h => h.dept_scores[d] || 0).filter(v => v > 0);
+        return vals.length ? (vals.reduce((a, b) => a + b, 0) / vals.length) * 100 : 0;
+      });
+      charts.departments = new Chart(document.getElementById('chartDepartments'), {
+        type: 'bar',
+        data: {
+          labels: state.departmentsOrder.map(trDept),
+          datasets: [{
+            label: 'Compliance (%)',
+            data: deptAvgs.map(v => Number(v.toFixed(1))),
+            backgroundColor: deptAvgs.map(v => v === 0 ? '#cbd5e1' : (v >= 90 ? '#10b981' : (v >= 75 ? '#0ea5e9' : '#ef4444'))),
+            borderRadius: 6
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: { min: 0, max: 100, ticks: { callback: v => v + '%' } },
+            x: { ticks: { maxRotation: 45, minRotation: 20, font: { size: 10 } } }
+          }
+        }
+      });
+
+      destroyChart('distribution');
+      const d2 = filteredItems.filter(x => x.v === 2).length;
+      const d1 = filteredItems.filter(x => x.v === 1).length;
+      const d0 = filteredItems.filter(x => x.v === 0).length;
+      const dna = filteredItems.filter(x => x.v === 'NA').length;
+      const dnone = filteredItems.filter(x => x.v === null).length;
+
+      charts.distribution = new Chart(document.getElementById('chartDistribution'), {
+        type: 'doughnut',
+        data: {
+          labels: ['Fully Met (2)', 'Partially Met (1)', 'Not Met (0)', 'N/A', 'Not Scored'],
+          datasets: [{
+            data: [d2, d1, d0, dna, dnone],
+            backgroundColor: ['#10b981', '#f59e0b', '#ef4444', '#64748b', '#cbd5e1'],
+            borderWidth: 2,
+            borderColor: '#ffffff'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: '62%',
+          plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } }
+        }
+      });
+
+      destroyChart('categories');
+      const catMap = {};
+      for (const h of hospsScope) {
+        for (const cs of h.category_scores) {
+          if (state.department !== 'ALL' && cs.department !== state.department) continue;
+          const catName = (cs.category || '').trim();
+          if (!catName) continue;
+          if (!catMap[catName]) catMap[catName] = [];
+          if (cs.score > 0) catMap[catName].push(cs.score * 100);
+        }
+      }
+      const catLabels = Object.keys(catMap);
+      const catVals = catLabels.map(k => {
+        const arr = catMap[k];
+        return arr.length ? Number((arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(1)) : 0;
+      });
+
+      charts.categories = new Chart(document.getElementById('chartCategories'), {
+        type: 'bar',
+        data: {
+          labels: catLabels.map(trCat),
+          datasets: [{
+            label: 'Compliance (%)',
+            data: catVals,
+            backgroundColor: '#0284c7',
+            borderRadius: 6
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: { x: { min: 0, max: 100, ticks: { callback: v => v + '%' } } }
+        }
+      });
+    }
+
+    function renderHeatmap() {
+      const tbl = document.getElementById('heatmapTable');
+      let html = '<thead><tr class="bg-slate-100 text-slate-700">';
+      html += '<th class="p-2.5 text-left border border-slate-200 sticky left-0 bg-slate-100 z-10">Hospital</th>';
+      html += '<th class="p-2.5 text-center border border-slate-200 bg-slate-200">Overall</th>';
+      for (const d of state.departmentsOrder) {
+        html += `<th class="p-2 text-center border border-slate-200 whitespace-nowrap">${escapeHtml(trDept(d))}</th>`;
+      }
+      html += '</tr></thead><tbody>';
+
+      for (const h of state.datasets) {
+        html += '<tr>';
+        html += `<td class="p-2.5 font-bold text-slate-800 border border-slate-200 whitespace-nowrap sticky left-0 bg-white">${escapeHtml(h.hospital)}</td>`;
+        const ov = (h.overall_score * 100).toFixed(1);
+        html += `<td class="p-2.5 text-center font-extrabold border border-slate-200 bg-slate-50 text-teal-800 tabular-nums">${ov}%</td>`;
+        for (const d of state.departmentsOrder) {
+          const val = (h.dept_scores[d] || 0) * 100;
+          let cls = 'bg-slate-100 text-slate-400';
+          if (val >= 90) cls = 'bg-emerald-100 text-emerald-900 font-bold';
+          else if (val >= 75) cls = 'bg-amber-100 text-amber-900 font-bold';
+          else if (val > 0) cls = 'bg-rose-100 text-rose-900 font-bold';
+          const display = val === 0 ? '0%' : `${val.toFixed(1)}%`;
+          html += `<td data-hosp="${escapeHtml(h.hospital)}" data-dept="${escapeHtml(d)}" class="heatmap-cell cursor-pointer p-2 text-center border border-slate-200 tabular-nums ${cls}" title="Click to view ${escapeHtml(trDept(d))} details for ${escapeHtml(h.hospital)}">${display}</td>`;
+        }
+        html += '</tr>';
+      }
+      html += '</tbody>';
+      tbl.innerHTML = html;
+
+      tbl.querySelectorAll('.heatmap-cell').forEach(cell => {
+        cell.addEventListener('click', () => {
+          state.hospital = cell.getAttribute('data-hosp');
+          state.department = cell.getAttribute('data-dept');
+          document.getElementById('filterHospital').value = state.hospital;
+          document.getElementById('filterDepartment').value = state.department;
+          switchTab('actionplan');
+          updateAll();
+        });
+      });
+    }
+
+    function getGapItems(filteredItems) {
+      return filteredItems.filter(it => {
+        if (state.gapMode === 'zero') return it.v === 0;
+        if (state.gapMode === 'one') return it.v === 1;
+        if (state.gapMode === 'with_action') return Boolean(it.a);
+        return it.v === 0 || it.v === 1 || Boolean(it.n) || Boolean(it.a);
+      });
+    }
+
+    function renderActionPlan(filteredItems) {
+      const gapItems = getGapItems(filteredItems);
+      const totalPages = Math.max(1, Math.ceil(gapItems.length / state.pageSize));
+      if (state.apPage > totalPages) state.apPage = totalPages;
+      const start = (state.apPage - 1) * state.pageSize;
+      const slice = gapItems.slice(start, start + state.pageSize);
+
+      const tbody = document.getElementById('actionPlanBody');
+      if (!slice.length) {
+        tbody.innerHTML = '<tr><td colspan="9" class="p-6 text-center text-slate-400 font-semibold">No gap items match the current filter</td></tr>';
+      } else {
+        tbody.innerHTML = slice.map(it => `
+          <tr class="hover:bg-slate-50">
+            <td class="p-2.5 font-bold text-slate-800 whitespace-nowrap">${escapeHtml(it.hospital)}</td>
+            <td class="p-2.5 text-slate-700 whitespace-nowrap">${escapeHtml(trDept(it.d))}</td>
+            <td class="p-2.5 text-slate-600 whitespace-nowrap">${escapeHtml(trCat(it.c))}</td>
+            <td class="p-2.5 text-slate-800">${escapeHtml(it.i)}</td>
+            <td class="p-2.5 whitespace-nowrap">${getScoreBadge(it.v)}</td>
+            <td class="p-2.5 text-slate-600">${escapeHtml(it.n || '—')}</td>
+            <td class="p-2.5 text-teal-800 font-semibold">${escapeHtml(it.a || '—')}</td>
+            <td class="p-2.5 text-slate-700 whitespace-nowrap">${escapeHtml(it.r || '—')}</td>
+            <td class="p-2.5 text-slate-600 whitespace-nowrap tabular-nums">${escapeHtml(it.t || '—')}</td>
+          </tr>
+        `).join('');
+      }
+
+      document.getElementById('actionPlanCount').textContent = `Showing ${slice.length} of ${gapItems.length.toLocaleString('en-US')} items`;
+      document.getElementById('apPageInfo').textContent = `Page ${state.apPage} of ${totalPages}`;
+      document.getElementById('apPrev').disabled = state.apPage <= 1;
+      document.getElementById('apNext').disabled = state.apPage >= totalPages;
+    }
+
+    function renderExplorer(filteredItems) {
+      const totalPages = Math.max(1, Math.ceil(filteredItems.length / state.pageSize));
+      if (state.exPage > totalPages) state.exPage = totalPages;
+      const start = (state.exPage - 1) * state.pageSize;
+      const slice = filteredItems.slice(start, start + state.pageSize);
+
+      const tbody = document.getElementById('explorerBody');
+      if (!slice.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-slate-400 font-semibold">No matching items found</td></tr>';
+      } else {
+        tbody.innerHTML = slice.map(it => `
+          <tr class="hover:bg-slate-50">
+            <td class="p-2.5 font-bold text-slate-800 whitespace-nowrap">${escapeHtml(it.hospital)}</td>
+            <td class="p-2.5 text-slate-700 whitespace-nowrap">${escapeHtml(trDept(it.d))}</td>
+            <td class="p-2.5 text-slate-600 whitespace-nowrap">${escapeHtml(trCat(it.c))}</td>
+            <td class="p-2.5 text-slate-800">${escapeHtml(it.i)}</td>
+            <td class="p-2.5 whitespace-nowrap">${getScoreBadge(it.v)}</td>
+            <td class="p-2.5 text-slate-600">${escapeHtml(it.n || '—')}</td>
+          </tr>
+        `).join('');
+      }
+
+      document.getElementById('explorerCount').textContent = `Showing ${slice.length} of ${filteredItems.length.toLocaleString('en-US')} items`;
+      document.getElementById('exPageInfo').textContent = `Page ${state.exPage} of ${totalPages}`;
+      document.getElementById('exPrev').disabled = state.exPage <= 1;
+      document.getElementById('exNext').disabled = state.exPage >= totalPages;
+    }
+
+    function switchTab(tabName) {
+      state.activeTab = tabName;
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-tab') === tabName);
+      });
+      ['overview', 'heatmap', 'actionplan', 'explorer'].forEach(t => {
+        document.getElementById(`tab-${t}`).classList.toggle('hidden', t !== tabName);
+      });
+    }
+
+    function exportGapCsv() {
+      const filtered = getFilteredItems();
+      const gaps = getGapItems(filtered);
+      if (!gaps.length) {
+        showToast('No gap data to export in current scope');
+        return;
+      }
+      const headers = ['Hospital', 'Department', 'Main Category', 'Checklist Item', 'Score', 'Notes', 'Corrective Action', 'Responsible', 'Timeframe'];
+      const escCsv = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+      const rows = [headers.map(escCsv).join(',')];
+      for (const it of gaps) {
+        rows.push([it.hospital, trDept(it.d), trCat(it.c), it.i, it.v ?? '', it.n, it.a, it.r, it.t].map(escCsv).join(','));
+      }
+      const blob = new Blob(['\uFEFF' + rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'eha_gaps_action_plan.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast(`Exported ${gaps.length} gap item(s) to CSV`);
+    }
+
+    function updateAll() {
+      if (!state.datasets.length) return;
+      const filtered = getFilteredItems();
+      renderKPIs(filtered);
+      renderCharts(filtered);
+      renderActionPlan(filtered);
+      renderExplorer(filtered);
+    }
+
+    function init() {
+      const dropZone = document.getElementById('dropZone');
+      ['dragenter', 'dragover'].forEach(evt => {
+        dropZone.addEventListener(evt, e => {
+          e.preventDefault();
+          dropZone.classList.add('drop-active');
+        });
+      });
+      ['dragleave', 'drop'].forEach(evt => {
+        dropZone.addEventListener(evt, e => {
+          e.preventDefault();
+          dropZone.classList.remove('drop-active');
+        });
+      });
+      dropZone.addEventListener('drop', e => {
+        if (e.dataTransfer?.files?.length) handleFiles(e.dataTransfer.files);
+      });
+
+      document.getElementById('fileInputMain').addEventListener('change', e => {
+        if (e.target.files?.length) handleFiles(e.target.files);
+        e.target.value = '';
+      });
+      document.getElementById('fileInputTop').addEventListener('change', e => {
+        if (e.target.files?.length) handleFiles(e.target.files);
+        e.target.value = '';
+      });
+
+      document.getElementById('btnClearAll').addEventListener('click', () => {
+        state.datasets = [];
+        state.departmentsOrder = [];
+        state.hospital = 'ALL';
+        state.department = 'ALL';
+        state.score = 'ALL';
+        state.search = '';
+        syncVisibility();
+        showToast('All files cleared');
+      });
+
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => switchTab(btn.getAttribute('data-tab')));
+      });
+
+      document.getElementById('filterHospital').addEventListener('change', e => {
+        state.hospital = e.target.value;
+        state.apPage = 1; state.exPage = 1;
+        updateAll();
+      });
+      document.getElementById('filterDepartment').addEventListener('change', e => {
+        state.department = e.target.value;
+        state.apPage = 1; state.exPage = 1;
+        updateAll();
+      });
+      document.getElementById('filterScore').addEventListener('change', e => {
+        state.score = e.target.value;
+        state.apPage = 1; state.exPage = 1;
+        updateAll();
+      });
+      document.getElementById('searchInput').addEventListener('input', e => {
+        state.search = e.target.value;
+        state.apPage = 1; state.exPage = 1;
+        updateAll();
+      });
+
+      document.getElementById('btnResetFilters').addEventListener('click', () => {
+        state.hospital = 'ALL';
+        state.department = 'ALL';
+        state.score = 'ALL';
+        state.search = '';
+        state.gapMode = 'all_gaps';
+        state.apPage = 1; state.exPage = 1;
+        document.getElementById('filterHospital').value = 'ALL';
+        document.getElementById('filterDepartment').value = 'ALL';
+        document.getElementById('filterScore').value = 'ALL';
+        document.getElementById('searchInput').value = '';
+        document.querySelectorAll('.gap-mode-btn').forEach(b => {
+          const isAll = b.getAttribute('data-gapmode') === 'all_gaps';
+          b.className = isAll
+            ? 'gap-mode-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-teal-600 text-white cursor-pointer'
+            : 'gap-mode-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer';
+        });
+        updateAll();
+        showToast('Filters reset');
+      });
+
+      document.getElementById('btnExportCsv').addEventListener('click', exportGapCsv);
+
+      document.querySelectorAll('.gap-mode-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.gapMode = btn.getAttribute('data-gapmode');
+          state.apPage = 1;
+          document.querySelectorAll('.gap-mode-btn').forEach(b => {
+            const active = b === btn;
+            b.className = active
+              ? 'gap-mode-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-teal-600 text-white cursor-pointer'
+              : 'gap-mode-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer';
+          });
+          renderActionPlan(getFilteredItems());
+        });
+      });
+
+      document.getElementById('apPrev').addEventListener('click', () => { if (state.apPage > 1) { state.apPage--; renderActionPlan(getFilteredItems()); } });
+      document.getElementById('apNext').addEventListener('click', () => { state.apPage++; renderActionPlan(getFilteredItems()); });
+      document.getElementById('exPrev').addEventListener('click', () => { if (state.exPage > 1) { state.exPage--; renderExplorer(getFilteredItems()); } });
+      document.getElementById('exNext').addEventListener('click', () => { state.exPage++; renderExplorer(getFilteredItems()); });
+    }
+
+    window.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>

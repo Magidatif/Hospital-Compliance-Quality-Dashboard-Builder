@@ -1,0 +1,13 @@
+{
+  "name": "asmaa-quality-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Hospital Compliance & Quality Dashboard Builder (Excel -> Dashboard) for Cloudflare",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
