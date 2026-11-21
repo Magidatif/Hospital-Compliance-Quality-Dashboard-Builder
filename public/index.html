@@ -35,6 +35,29 @@
       border-color: #0d9488 !important;
       background-color: #f0fdfa !important;
     }
+    @media print {
+      body { background-color: #ffffff !important; }
+      header, footer, #uploadSection, #loadedFilesBar, #filterNavBar, #kpiRow,
+      #tab-overview, #tab-heatmap, #tab-actionplan, #tab-explorer, #toast, .no-print {
+        display: none !important;
+      }
+      #dashboardWrapper, #tab-report {
+        display: block !important;
+      }
+      main {
+        max-width: 100% !important;
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+      #reportContent {
+        box-shadow: none !important;
+        border: none !important;
+        padding: 0 !important;
+      }
+      .print-break-inside-avoid {
+        break-inside: avoid;
+      }
+    }
   </style>
 </head>
 <body class="min-h-screen flex flex-col">
@@ -113,7 +136,7 @@
   <div id="dashboardWrapper" class="hidden flex-1 flex flex-col">
 
     <!-- Loaded Files Chips Bar -->
-    <div class="bg-slate-800 text-slate-200 border-b border-slate-700">
+    <div id="loadedFilesBar" class="bg-slate-800 text-slate-200 border-b border-slate-700">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex flex-wrap items-center gap-2 text-xs">
         <span class="font-bold text-teal-400">Loaded Files:</span>
         <div id="loadedFilesList" class="flex flex-wrap items-center gap-1.5"></div>
@@ -121,7 +144,7 @@
     </div>
 
     <!-- Filters & Navigation Bar -->
-    <section class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+    <section id="filterNavBar" class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 space-y-3">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <nav class="flex flex-wrap gap-1.5" aria-label="Main Tabs">
@@ -129,6 +152,7 @@
             <button type="button" data-tab="heatmap" class="tab-btn px-3.5 py-2 rounded-lg text-xs sm:text-sm font-bold text-slate-700 hover:bg-slate-100 transition cursor-pointer">Heatmap Matrix</button>
             <button type="button" data-tab="actionplan" class="tab-btn px-3.5 py-2 rounded-lg text-xs sm:text-sm font-bold text-slate-700 hover:bg-slate-100 transition cursor-pointer">Gaps &amp; Action Plan</button>
             <button type="button" data-tab="explorer" class="tab-btn px-3.5 py-2 rounded-lg text-xs sm:text-sm font-bold text-slate-700 hover:bg-slate-100 transition cursor-pointer">Full Checklist Explorer</button>
+            <button type="button" data-tab="report" class="tab-btn px-3.5 py-2 rounded-lg text-xs sm:text-sm font-bold text-slate-700 hover:bg-slate-100 transition cursor-pointer">Executive Report</button>
           </nav>
           <div class="flex items-center gap-2">
             <div id="activeScopeBadge" class="text-xs font-bold text-teal-800 bg-teal-50 border border-teal-200 px-3 py-1.5 rounded-full"></div>
@@ -168,7 +192,7 @@
     <main class="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 space-y-6">
 
       <!-- KPI Row -->
-      <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <section id="kpiRow" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm">
           <p class="text-xs font-bold text-slate-500">Overall Compliance Rate</p>
           <p id="kpiOverall" class="text-2xl sm:text-3xl font-extrabold text-teal-700 mt-1 tabular-nums">--%</p>
@@ -340,6 +364,27 @@
         </div>
       </section>
 
+      <!-- TAB 5: Executive Report for Decision-Makers -->
+      <section id="tab-report" class="hidden space-y-4">
+        <div class="no-print bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h2 class="text-base font-extrabold text-slate-800">Detailed Executive Report &amp; Decision-Maker Insights</h2>
+            <p class="text-xs text-slate-500">Auto-generated from your current filter scope — ready for leadership review, export, or printing</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <div class="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-0.5 text-xs font-bold">
+              <button type="button" data-report-lang="en" class="report-lang-btn px-2.5 py-1 rounded-md bg-teal-600 text-white cursor-pointer">English</button>
+              <button type="button" data-report-lang="ar" class="report-lang-btn px-2.5 py-1 rounded-md text-slate-700 hover:text-slate-900 cursor-pointer">العربية</button>
+            </div>
+            <button id="btnPrintReport" type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold transition cursor-pointer">
+              Print / Save PDF
+            </button>
+          </div>
+        </div>
+
+        <div id="reportContent" class="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6"></div>
+      </section>
+
     </main>
   </div>
 
@@ -377,6 +422,7 @@
       score: 'ALL',
       search: '',
       gapMode: 'all_gaps',
+      reportLang: 'en',
       apPage: 1,
       exPage: 1,
       pageSize: 40
@@ -980,12 +1026,440 @@
       document.getElementById('exNext').disabled = state.exPage >= totalPages;
     }
 
+    function buildReportData(filteredItems) {
+      const hosps = getFilteredHospitals();
+      let overallPct = 0;
+      if (state.department === 'ALL') {
+        const sum = hosps.reduce((acc, h) => acc + (h.overall_score || 0), 0);
+        overallPct = hosps.length ? (sum / hosps.length) * 100 : 0;
+      } else {
+        const activeScores = hosps.map(h => h.dept_scores[state.department] || 0).filter(v => v > 0);
+        overallPct = activeScores.length ? (activeScores.reduce((a, b) => a + b, 0) / activeScores.length) * 100 : 0;
+      }
+
+      const total = filteredItems.length;
+      const met2 = filteredItems.filter(x => x.v === 2).length;
+      const part1 = filteredItems.filter(x => x.v === 1).length;
+      const not0 = filteredItems.filter(x => x.v === 0).length;
+      const na = filteredItems.filter(x => x.v === 'NA').length;
+      const none = filteredItems.filter(x => x.v === null).length;
+      const applicable = met2 + part1 + not0;
+      const gapTotal = not0 + part1;
+      const gapItems = filteredItems.filter(x => x.v === 0 || x.v === 1);
+      const gapsWithAction = gapItems.filter(x => Boolean(x.a)).length;
+      const gapsWithResp = gapItems.filter(x => Boolean(x.r)).length;
+      const gapsWithTime = gapItems.filter(x => Boolean(x.t)).length;
+      const criticalNoAction = filteredItems.filter(x => x.v === 0 && !x.a).length;
+
+      const hospRows = hosps.map(h => {
+        const hItems = filteredItems.filter(it => it.hospital === h.hospital);
+        const h2 = hItems.filter(x => x.v === 2).length;
+        const h1 = hItems.filter(x => x.v === 1).length;
+        const h0 = hItems.filter(x => x.v === 0).length;
+        const activeDepts = Object.values(h.dept_scores || {}).filter(v => v > 0).length;
+        const score = state.department === 'ALL' ? (h.overall_score || 0) * 100 : ((h.dept_scores[state.department] || 0) * 100);
+        const period = [h.month, h.year].filter(Boolean).join(' ');
+        return {
+          hospital: h.hospital,
+          period,
+          score,
+          activeDepts,
+          total: hItems.length,
+          met2: h2,
+          part1: h1,
+          not0: h0,
+          gaps: h1 + h0
+        };
+      }).sort((a, b) => b.score - a.score);
+
+      const deptRows = state.departmentsOrder
+        .filter(d => state.department === 'ALL' || d === state.department)
+        .map(d => {
+          const vals = hosps.map(h => h.dept_scores[d] || 0).filter(v => v > 0);
+          const avg = vals.length ? (vals.reduce((a, b) => a + b, 0) / vals.length) * 100 : 0;
+          const dItems = filteredItems.filter(it => it.d === d);
+          const d0 = dItems.filter(x => x.v === 0).length;
+          const d1 = dItems.filter(x => x.v === 1).length;
+          const below75 = hosps.filter(h => {
+            const s = h.dept_scores[d] || 0;
+            return s > 0 && s * 100 < 75;
+          }).length;
+          return { dept: d, avg, activeCount: vals.length, total: dItems.length, not0: d0, part1: d1, below75 };
+        })
+        .filter(r => r.activeCount > 0 || r.total > 0)
+        .sort((a, b) => a.avg - b.avg);
+
+      const catMap = {};
+      for (const h of hosps) {
+        for (const cs of h.category_scores) {
+          if (state.department !== 'ALL' && cs.department !== state.department) continue;
+          const c = (cs.category || '').trim();
+          if (!c || cs.score <= 0) continue;
+          if (!catMap[c]) catMap[c] = [];
+          catMap[c].push(cs.score * 100);
+        }
+      }
+      const catRows = Object.entries(catMap)
+        .map(([cat, arr]) => ({ cat, avg: arr.reduce((a, b) => a + b, 0) / arr.length, count: arr.length }))
+        .sort((a, b) => a.avg - b.avg);
+
+      const recurringMap = {};
+      for (const it of gapItems) {
+        const key = `${it.d}||${it.i}`;
+        if (!recurringMap[key]) recurringMap[key] = { dept: it.d, cat: it.c, item: it.i, hospitals: new Set(), not0: 0, part1: 0 };
+        recurringMap[key].hospitals.add(it.hospital);
+        if (it.v === 0) recurringMap[key].not0++;
+        else recurringMap[key].part1++;
+      }
+      const recurringGaps = Object.values(recurringMap)
+        .filter(g => g.hospitals.size > 1)
+        .sort((a, b) => (b.hospitals.size - a.hospitals.size) || (b.not0 - a.not0))
+        .slice(0, 8);
+
+      const priorityGaps = [
+        ...filteredItems.filter(x => x.v === 0),
+        ...filteredItems.filter(x => x.v === 1)
+      ].slice(0, 12);
+
+      const periods = Array.from(new Set(hosps.map(h => [h.month, h.year].filter(Boolean).join(' ')).filter(Boolean)));
+
+      return {
+        hosps,
+        overallPct,
+        total,
+        met2,
+        part1,
+        not0,
+        na,
+        none,
+        applicable,
+        gapTotal,
+        gapsWithAction,
+        gapsWithResp,
+        gapsWithTime,
+        criticalNoAction,
+        hospRows,
+        deptRows,
+        catRows,
+        recurringGaps,
+        priorityGaps,
+        periods
+      };
+    }
+
+    function getStatusTier(pct, isAr) {
+      if (pct >= 90) return { label: isAr ? 'امتثال مرتفع (جاهزية عالية)' : 'High Compliance (Ready)', cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' };
+      if (pct >= 75) return { label: isAr ? 'امتثال متوسط (يتطلب متابعة موجهة)' : 'Moderate Compliance (Targeted Follow-Up)', cls: 'bg-amber-100 text-amber-800 border-amber-200' };
+      return { label: isAr ? 'امتثال حرج (يتطلب تدخل فوري)' : 'Critical Risk (Immediate Intervention)', cls: 'bg-rose-100 text-rose-800 border-rose-200' };
+    }
+
+    function buildInsightsAndRecommendations(data, isAr) {
+      const insights = [];
+      const recs = [];
+      const topH = data.hospRows[0];
+      const botH = data.hospRows[data.hospRows.length - 1];
+      const activeDepts = data.deptRows.filter(d => d.avg > 0);
+      const weakDepts = activeDepts.filter(d => d.avg < 75);
+      const strongDepts = activeDepts.filter(d => d.avg >= 90);
+      const weakCats = data.catRows.filter(c => c.avg < 80);
+      const actionCov = data.gapTotal ? (data.gapsWithAction / data.gapTotal) * 100 : 100;
+      const respCov = data.gapTotal ? (data.gapsWithResp / data.gapTotal) * 100 : 100;
+
+      if (isAr) {
+        if (data.hospRows.length > 1 && topH && botH) {
+          const spread = (topH.score - botH.score).toFixed(1);
+          insights.push(`تباين الأداء بين المستشفيات: حقق "${topH.hospital}" أعلى نسبة امتثال (${topH.score.toFixed(1)}%) مقابل "${botH.hospital}" كأقل نسبة (${botH.score.toFixed(1)}%) بفارق ${spread} نقطة مئوية.`);
+        } else if (topH) {
+          insights.push(`نسبة الامتثال المسجلة لـ "${topH.hospital}" هي ${topH.score.toFixed(1)}% عبر ${topH.activeDepts} قسم نشط.`);
+        }
+        if (weakDepts.length) {
+          const names = weakDepts.slice(0, 4).map(d => `${d.dept} (${d.avg.toFixed(1)}%)`).join('، ');
+          insights.push(`أقسام دون عتبة 75% (فجوة حرجة): ${names}. تمثل هذه الأقسام الأولوية القصوى للتدقيق الميداني.`);
+        } else if (activeDepts.length) {
+          insights.push(`جميع الأقسام النشطة (${activeDepts.length} قسم) تتجاوز عتبة 75%، مع تفوق ${strongDepts.length} قسم بنسبة ≥ 90%.`);
+        }
+        if (weakCats.length) {
+          const cNames = weakCats.slice(0, 3).map(c => `${c.cat} (${c.avg.toFixed(1)}%)`).join('، ');
+          insights.push(`أضعف المحاور الرئيسية في التقييم: ${cNames}.`);
+        }
+        if (data.recurringGaps.length) {
+          insights.push(`تم رصد ${data.recurringGaps.length} فجوات متكررة في أكثر من مستشفى، مما يشير إلى خلل نظامي يحتاج توحيد السياسات والتدريب.`);
+        }
+        if (data.gapTotal > 0) {
+          insights.push(`تغطية خطط التصحيح: ${actionCov.toFixed(0)}% من الفجوات لها إجراء تصحيحي موثق، و${respCov.toFixed(0)}% محددة المسؤول. يوجد ${data.criticalNoAction} بند غير مستوفى (0) بدون إجراء تصحيحي.`);
+        }
+
+        if (data.not0 > 0) {
+          recs.push(`أولوية عاجلة: معالجة ${data.not0} بند غير مستوفى (درجة 0) وتحديد جدول زمني للإغلاق قبل جولة المراجعة القادمة.`);
+        }
+        if (data.criticalNoAction > 0) {
+          recs.push(`حوكمة المتابعة: إلزام فرق الجودة باستكمال خطط العمل وتعيين مسؤول وموعد تنفيذ لـ ${data.criticalNoAction} فجوة حرجة تفتقر حالياً لإجراء تصحيحي.`);
+        }
+        if (weakDepts.length) {
+          recs.push(`تدخل تشغيلي موجه: تشكيل فريق دعم فني للأقسام الأقل من 75% (${weakDepts.slice(0, 3).map(d => d.dept).join('، ')}) ومراجعة أسباب التعثر أسبوعياً.`);
+        }
+        if (data.recurringGaps.length) {
+          recs.push(`توحيد المعايير على مستوى الشبكة: إصدار تعميم أو برنامج تدريبي موحد لمعالجة الفجوات المتكررة عبر المستشفيات.`);
+        }
+        if (!recs.length) {
+          recs.push(`الحفاظ على استدامة الأداء الحالي عبر المراجعات الدورية ومشاركة أفضل الممارسات من الأقسام الحاصلة على ≥ 90%.`);
+        }
+      } else {
+        if (data.hospRows.length > 1 && topH && botH) {
+          const spread = (topH.score - botH.score).toFixed(1);
+          insights.push(`Cross-hospital variance: "${topH.hospital}" leads at ${topH.score.toFixed(1)}% while "${botH.hospital}" trails at ${botH.score.toFixed(1)}% (${spread} percentage-point spread).`);
+        } else if (topH) {
+          insights.push(`Recorded compliance for "${topH.hospital}" is ${topH.score.toFixed(1)}% across ${topH.activeDepts} active departments.`);
+        }
+        if (weakDepts.length) {
+          const names = weakDepts.slice(0, 4).map(d => `${trDept(d.dept)} (${d.avg.toFixed(1)}%)`).join(', ');
+          insights.push(`Departments below 75% threshold: ${names}. These represent the highest operational compliance risk.`);
+        } else if (activeDepts.length) {
+          insights.push(`All ${activeDepts.length} active departments exceed the 75% threshold, with ${strongDepts.length} achieving ≥ 90% excellence.`);
+        }
+        if (weakCats.length) {
+          const cNames = weakCats.slice(0, 3).map(c => `${trCat(c.cat)} (${c.avg.toFixed(1)}%)`).join(', ');
+          insights.push(`Lowest-scoring main categories: ${cNames}.`);
+        }
+        if (data.recurringGaps.length) {
+          insights.push(`Systemic pattern detected: ${data.recurringGaps.length} recurring gap items appear across multiple hospitals, pointing to network-wide process or training gaps.`);
+        }
+        if (data.gapTotal > 0) {
+          insights.push(`Action-plan governance: ${actionCov.toFixed(0)}% of gap items have a documented corrective action and ${respCov.toFixed(0)}% have an assigned owner. ${data.criticalNoAction} Not-Met (0) items currently lack a corrective action.`);
+        }
+
+        if (data.not0 > 0) {
+          recs.push(`Immediate Priority: Close ${data.not0} Not-Met (0) critical items with verified evidence before the next compliance audit.`);
+        }
+        if (data.criticalNoAction > 0) {
+          recs.push(`Governance Escalation: Require quality leads to assign corrective actions, owners, and target dates for the ${data.criticalNoAction} critical (0) gaps missing an action plan.`);
+        }
+        if (weakDepts.length) {
+          recs.push(`Targeted Support: Deploy focused coaching and weekly follow-ups to departments below 75% (${weakDepts.slice(0, 3).map(d => trDept(d.dept)).join(', ')}).`);
+        }
+        if (data.recurringGaps.length) {
+          recs.push(`Network Standardization: Address the ${data.recurringGaps.length} recurring multi-hospital gaps through standardized SOPs and group-wide training.`);
+        }
+        if (!recs.length) {
+          recs.push(`Sustain current high performance through routine spot-checks and peer benchmarking from ≥ 90% departments.`);
+        }
+      }
+
+      return { insights, recs, actionCov, respCov };
+    }
+
+    function renderReport(filteredItems) {
+      const container = document.getElementById('reportContent');
+      if (!container) return;
+      const isAr = state.reportLang === 'ar';
+      container.setAttribute('dir', isAr ? 'rtl' : 'ltr');
+      container.classList.toggle('text-right', isAr);
+
+      const data = buildReportData(filteredItems);
+      const tier = getStatusTier(data.overallPct, isAr);
+      const { insights, recs, actionCov } = buildInsightsAndRecommendations(data, isAr);
+      const scopeHosp = state.hospital === 'ALL' ? (isAr ? `جميع المستشفيات (${data.hosps.length})` : `All Hospitals (${data.hosps.length})`) : state.hospital;
+      const scopeDept = state.department === 'ALL' ? (isAr ? 'جميع الأقسام' : 'All Departments') : (isAr ? state.department : trDept(state.department));
+      const periodText = data.periods.length ? data.periods.join(' / ') : (isAr ? 'غير محدد' : 'Not specified');
+      const nowStr = new Date().toLocaleString(isAr ? 'ar-EG' : 'en-US', { dateStyle: 'medium', timeStyle: 'short' });
+      const metRate = data.applicable ? ((data.met2 / data.applicable) * 100).toFixed(1) : '0.0';
+
+      container.innerHTML = `
+        <!-- Report Header -->
+        <div class="border-b border-slate-200 pb-5 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+          <div>
+            <p class="text-xs font-extrabold uppercase tracking-wider text-teal-700 mb-1">${isAr ? 'تقرير تنفيذي لمتخذي القرار' : 'Executive Quality &amp; Compliance Report'}</p>
+            <h3 class="text-2xl font-extrabold text-slate-900">${isAr ? 'تقرير تحليل الامتثال والجودة وأهم الملاحظات القيادية' : 'Hospital Compliance Analysis &amp; Decision-Maker Briefing'}</h3>
+            <p class="text-xs text-slate-500 mt-1.5">
+              <strong>${isAr ? 'النطاق:' : 'Scope:'}</strong> ${escapeHtml(scopeHosp)} • ${escapeHtml(scopeDept)}
+              &nbsp;|&nbsp; <strong>${isAr ? 'الفترة:' : 'Period:'}</strong> ${escapeHtml(periodText)}
+              &nbsp;|&nbsp; <strong>${isAr ? 'تاريخ التقرير:' : 'Generated:'}</strong> ${escapeHtml(nowStr)}
+            </p>
+          </div>
+          <span class="inline-flex items-center px-3.5 py-1.5 rounded-full text-xs font-extrabold border ${tier.cls} shrink-0">${escapeHtml(tier.label)}</span>
+        </div>
+
+        <!-- 1. Executive Summary Cards -->
+        <div class="print-break-inside-avoid space-y-3">
+          <h4 class="text-sm font-extrabold text-slate-800">${isAr ? '1. الملخص التنفيذي ومؤشرات الجاهزية' : '1. Executive Summary &amp; Readiness Metrics'}</h4>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div class="rounded-xl bg-teal-50 border border-teal-200 p-3.5">
+              <p class="text-[11px] font-bold text-teal-800">${isAr ? 'معدل الامتثال العام' : 'Overall Compliance'}</p>
+              <p class="text-2xl font-extrabold text-teal-900 tabular-nums mt-0.5">${data.overallPct.toFixed(2)}%</p>
+              <p class="text-[11px] text-teal-700 mt-0.5">${isAr ? `نسبة الاستيفاء الكامل: ${metRate}%` : `Full-met rate: ${metRate}%`}</p>
+            </div>
+            <div class="rounded-xl bg-slate-50 border border-slate-200 p-3.5">
+              <p class="text-[11px] font-bold text-slate-600">${isAr ? 'إجمالي البنود المقيمة' : 'Evaluated Items'}</p>
+              <p class="text-2xl font-extrabold text-slate-900 tabular-nums mt-0.5">${data.total.toLocaleString('en-US')}</p>
+              <p class="text-[11px] text-slate-500 mt-0.5">${isAr ? `مستوفى (2): ${data.met2} | غير منطبق: ${data.na}` : `Met (2): ${data.met2} | N/A: ${data.na}`}</p>
+            </div>
+            <div class="rounded-xl bg-rose-50 border border-rose-200 p-3.5">
+              <p class="text-[11px] font-bold text-rose-800">${isAr ? 'إجمالي الفجوات (0 و 1)' : 'Total Gaps (0 &amp; 1)'}</p>
+              <p class="text-2xl font-extrabold text-rose-700 tabular-nums mt-0.5">${data.gapTotal.toLocaleString('en-US')}</p>
+              <p class="text-[11px] text-rose-700 mt-0.5">${isAr ? `غير مستوفى (0): ${data.not0} | جزئي (1): ${data.part1}` : `Not Met (0): ${data.not0} | Partial (1): ${data.part1}`}</p>
+            </div>
+            <div class="rounded-xl bg-amber-50 border border-amber-200 p-3.5">
+              <p class="text-[11px] font-bold text-amber-800">${isAr ? 'تغطية خطط التصحيح' : 'Action Plan Coverage'}</p>
+              <p class="text-2xl font-extrabold text-amber-800 tabular-nums mt-0.5">${actionCov.toFixed(0)}%</p>
+              <p class="text-[11px] text-amber-700 mt-0.5">${isAr ? `فجوات حرجة بلا إجراء: ${data.criticalNoAction}` : `Critical (0) w/o action: ${data.criticalNoAction}`}</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Key Observations & Recommendations -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 print-break-inside-avoid">
+          <div class="rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-2.5">
+            <h4 class="text-sm font-extrabold text-slate-900">${isAr ? '2. أهم الملاحظات والاستنتاجات لمتخذي القرار' : '2. Key Observations for Decision-Makers'}</h4>
+            <ul class="space-y-2 text-xs sm:text-sm text-slate-700 list-disc ${isAr ? 'pr-5' : 'pl-5'}">
+              ${insights.map(txt => `<li>${escapeHtml(txt)}</li>`).join('')}
+            </ul>
+          </div>
+          <div class="rounded-xl border border-teal-200 bg-teal-50/50 p-4 space-y-2.5">
+            <h4 class="text-sm font-extrabold text-teal-900">${isAr ? '3. التوصيات وأولويات التدخل المقترحة' : '3. Prioritized Recommendations'}</h4>
+            <ul class="space-y-2 text-xs sm:text-sm text-slate-800 list-disc ${isAr ? 'pr-5' : 'pl-5'}">
+              ${recs.map(txt => `<li>${escapeHtml(txt)}</li>`).join('')}
+            </ul>
+          </div>
+        </div>
+
+        <!-- 4. Hospital Ranking Table -->
+        <div class="print-break-inside-avoid space-y-2.5">
+          <h4 class="text-sm font-extrabold text-slate-800">${isAr ? '4. ترتيب المستشفيات ومؤشرات المخاطر' : '4. Hospital Performance &amp; Risk Ranking'}</h4>
+          <div class="overflow-x-auto border border-slate-200 rounded-xl">
+            <table class="w-full text-xs sm:text-sm ${isAr ? 'text-right' : 'text-left'}">
+              <thead class="bg-slate-100 text-slate-700 font-bold">
+                <tr>
+                  <th class="p-2.5">#</th>
+                  <th class="p-2.5">${isAr ? 'المستشفى' : 'Hospital'}</th>
+                  <th class="p-2.5">${isAr ? 'نسبة الامتثال' : 'Compliance'}</th>
+                  <th class="p-2.5">${isAr ? 'الأقسام النشطة' : 'Active Depts'}</th>
+                  <th class="p-2.5">${isAr ? 'مستوفى (2)' : 'Met (2)'}</th>
+                  <th class="p-2.5">${isAr ? 'جزئي (1)' : 'Partial (1)'}</th>
+                  <th class="p-2.5">${isAr ? 'غير مستوفى (0)' : 'Not Met (0)'}</th>
+                  <th class="p-2.5">${isAr ? 'التقييم' : 'Status'}</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-200">
+                ${data.hospRows.map((r, i) => {
+                  const st = getStatusTier(r.score, isAr);
+                  return `
+                    <tr class="hover:bg-slate-50">
+                      <td class="p-2.5 font-bold text-slate-500 tabular-nums">${i + 1}</td>
+                      <td class="p-2.5 font-bold text-slate-900">${escapeHtml(r.hospital)}</td>
+                      <td class="p-2.5 font-extrabold tabular-nums ${r.score >= 90 ? 'text-emerald-700' : (r.score >= 75 ? 'text-amber-700' : 'text-rose-700')}">${r.score.toFixed(1)}%</td>
+                      <td class="p-2.5 tabular-nums text-slate-600">${r.activeDepts}</td>
+                      <td class="p-2.5 tabular-nums text-emerald-700 font-semibold">${r.met2}</td>
+                      <td class="p-2.5 tabular-nums text-amber-700 font-semibold">${r.part1}</td>
+                      <td class="p-2.5 tabular-nums text-rose-700 font-bold">${r.not0}</td>
+                      <td class="p-2.5"><span class="inline-flex px-2 py-0.5 rounded-full text-[11px] font-bold border ${st.cls}">${escapeHtml(st.label)}</span></td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 5. Department Breakdown & Category Bottlenecks -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 print-break-inside-avoid">
+          <div class="space-y-2.5">
+            <h4 class="text-sm font-extrabold text-slate-800">${isAr ? '5. أداء الأقسام (من الأقل للأعلى امتثالاً)' : '5. Department Breakdown (Lowest to Highest)'}</h4>
+            <div class="overflow-x-auto border border-slate-200 rounded-xl">
+              <table class="w-full text-xs ${isAr ? 'text-right' : 'text-left'}">
+                <thead class="bg-slate-100 text-slate-700 font-bold">
+                  <tr>
+                    <th class="p-2.5">${isAr ? 'القسم' : 'Department'}</th>
+                    <th class="p-2.5">${isAr ? 'المتوسط' : 'Avg %'}</th>
+                    <th class="p-2.5">${isAr ? 'فجوات (0 / 1)' : 'Gaps (0 / 1)'}</th>
+                    <th class="p-2.5">${isAr ? 'دون 75%' : '< 75% Hosps'}</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200">
+                  ${data.deptRows.length ? data.deptRows.map(d => `
+                    <tr>
+                      <td class="p-2 font-semibold text-slate-800">${escapeHtml(isAr ? d.dept : trDept(d.dept))}</td>
+                      <td class="p-2 font-extrabold tabular-nums ${d.avg >= 90 ? 'text-emerald-700' : (d.avg >= 75 ? 'text-amber-700' : 'text-rose-700')}">${d.avg.toFixed(1)}%</td>
+                      <td class="p-2 tabular-nums text-slate-600">${d.not0} / ${d.part1}</td>
+                      <td class="p-2 tabular-nums ${d.below75 > 0 ? 'text-rose-700 font-bold' : 'text-slate-400'}">${d.below75}</td>
+                    </tr>
+                  `).join('') : `<tr><td colspan="4" class="p-4 text-center text-slate-400">${isAr ? 'لا توجد بيانات أقسام' : 'No department data'}</td></tr>`}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="space-y-2.5">
+            <h4 class="text-sm font-extrabold text-slate-800">${isAr ? '6. أداء المحاور الرئيسية والفجوات المتكررة' : '6. Main Categories &amp; Recurring Multi-Hospital Gaps'}</h4>
+            <div class="overflow-x-auto border border-slate-200 rounded-xl">
+              <table class="w-full text-xs ${isAr ? 'text-right' : 'text-left'}">
+                <thead class="bg-slate-100 text-slate-700 font-bold">
+                  <tr>
+                    <th class="p-2.5">${isAr ? 'المحور الرئيسي' : 'Main Category'}</th>
+                    <th class="p-2.5">${isAr ? 'متوسط الامتثال' : 'Avg Score'}</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200">
+                  ${data.catRows.length ? data.catRows.map(c => `
+                    <tr>
+                      <td class="p-2 font-semibold text-slate-800">${escapeHtml(isAr ? c.cat : trCat(c.cat))}</td>
+                      <td class="p-2 font-extrabold tabular-nums ${c.avg >= 90 ? 'text-emerald-700' : (c.avg >= 75 ? 'text-amber-700' : 'text-rose-700')}">${c.avg.toFixed(1)}%</td>
+                    </tr>
+                  `).join('') : `<tr><td colspan="2" class="p-4 text-center text-slate-400">${isAr ? 'لا توجد بيانات محاور' : 'No category scores'}</td></tr>`}
+                </tbody>
+              </table>
+            </div>
+            ${data.recurringGaps.length ? `
+              <div class="rounded-xl border border-amber-200 bg-amber-50/60 p-3 space-y-1.5">
+                <p class="text-xs font-extrabold text-amber-900">${isAr ? 'أبرز الفجوات المتكررة عبر أكثر من مستشفى:' : 'Top Recurring Gaps Across Hospitals:'}</p>
+                <ul class="text-xs text-slate-700 space-y-1 list-disc ${isAr ? 'pr-4' : 'pl-4'}">
+                  ${data.recurringGaps.slice(0, 5).map(g => `
+                    <li><strong>${escapeHtml(isAr ? g.dept : trDept(g.dept))}:</strong> ${escapeHtml(g.item)} <span class="text-amber-800 font-bold">(${g.hospitals.size} ${isAr ? 'مستشفيات' : 'hospitals'})</span></li>
+                  `).join('')}
+                </ul>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+
+        <!-- 7. Priority Critical Gaps -->
+        <div class="print-break-inside-avoid space-y-2.5">
+          <h4 class="text-sm font-extrabold text-slate-800">${isAr ? '7. أهم البنود الحرجة ذات الأولوية (عينة من الفجوات)' : '7. Top Priority Gap Items (Actionable Sample)'}</h4>
+          <div class="overflow-x-auto border border-slate-200 rounded-xl">
+            <table class="w-full text-xs ${isAr ? 'text-right' : 'text-left'}">
+              <thead class="bg-slate-100 text-slate-700 font-bold">
+                <tr>
+                  <th class="p-2.5">${isAr ? 'المستشفى' : 'Hospital'}</th>
+                  <th class="p-2.5">${isAr ? 'القسم' : 'Department'}</th>
+                  <th class="p-2.5">${isAr ? 'البند' : 'Checklist Item'}</th>
+                  <th class="p-2.5">${isAr ? 'التقييم' : 'Score'}</th>
+                  <th class="p-2.5">${isAr ? 'الإجراء التصحيحي' : 'Corrective Action'}</th>
+                  <th class="p-2.5">${isAr ? 'المسؤول' : 'Responsible'}</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-200">
+                ${data.priorityGaps.length ? data.priorityGaps.map(it => `
+                  <tr>
+                    <td class="p-2 font-bold text-slate-800 whitespace-nowrap">${escapeHtml(it.hospital)}</td>
+                    <td class="p-2 text-slate-700 whitespace-nowrap">${escapeHtml(isAr ? it.d : trDept(it.d))}</td>
+                    <td class="p-2 text-slate-800">${escapeHtml(it.i)}</td>
+                    <td class="p-2 whitespace-nowrap">${getScoreBadge(it.v)}</td>
+                    <td class="p-2 text-teal-800 font-semibold">${escapeHtml(it.a || '—')}</td>
+                    <td class="p-2 text-slate-700 whitespace-nowrap">${escapeHtml(it.r || '—')}</td>
+                  </tr>
+                `).join('') : `<tr><td colspan="6" class="p-4 text-center text-emerald-700 font-bold">${isAr ? 'لا توجد فجوات حرجة في النطاق الحالي' : 'No gap items in current scope'}</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
     function switchTab(tabName) {
       state.activeTab = tabName;
       document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.classList.toggle('active', btn.getAttribute('data-tab') === tabName);
       });
-      ['overview', 'heatmap', 'actionplan', 'explorer'].forEach(t => {
+      ['overview', 'heatmap', 'actionplan', 'explorer', 'report'].forEach(t => {
         document.getElementById(`tab-${t}`).classList.toggle('hidden', t !== tabName);
       });
     }
@@ -1022,6 +1496,7 @@
       renderCharts(filtered);
       renderActionPlan(filtered);
       renderExplorer(filtered);
+      renderReport(filtered);
     }
 
     function init() {
@@ -1128,6 +1603,24 @@
       document.getElementById('apNext').addEventListener('click', () => { state.apPage++; renderActionPlan(getFilteredItems()); });
       document.getElementById('exPrev').addEventListener('click', () => { if (state.exPage > 1) { state.exPage--; renderExplorer(getFilteredItems()); } });
       document.getElementById('exNext').addEventListener('click', () => { state.exPage++; renderExplorer(getFilteredItems()); });
+
+      document.querySelectorAll('.report-lang-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.reportLang = btn.getAttribute('data-report-lang');
+          document.querySelectorAll('.report-lang-btn').forEach(b => {
+            const active = b === btn;
+            b.className = active
+              ? 'report-lang-btn px-2.5 py-1 rounded-md bg-teal-600 text-white cursor-pointer'
+              : 'report-lang-btn px-2.5 py-1 rounded-md text-slate-700 hover:text-slate-900 cursor-pointer';
+          });
+          if (state.datasets.length) renderReport(getFilteredItems());
+        });
+      });
+
+      document.getElementById('btnPrintReport').addEventListener('click', () => {
+        if (!state.datasets.length) return;
+        window.print();
+      });
     }
 
     window.addEventListener('DOMContentLoaded', init);
